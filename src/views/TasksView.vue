@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Calendar, Check, Delete, EditPen, Plus } from '@element-plus/icons-vue'
+import { Calendar, Check, Delete, Plus } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import TaskEditorDialog from '@/components/TaskEditorDialog.vue'
@@ -286,6 +286,10 @@ function taskMeta(task) {
             class="todo-item"
             :class="{ completed: task.completed }"
             :style="{ borderLeftColor: priorityColor(task.priority) }"
+            role="button"
+            tabindex="0"
+            @click="openEditDialog(task)"
+            @keydown.enter="openEditDialog(task)"
           >
             <button
               type="button"
@@ -293,7 +297,7 @@ function taskMeta(task) {
               :class="{ checked: task.completed }"
               :style="{ borderColor: priorityColor(task.priority), backgroundColor: task.completed ? priorityColor(task.priority) : '#ffffff' }"
               :aria-label="task.completed ? 'Mark task as pending' : 'Mark task as completed'"
-              @click="toggleTask(task.id)"
+              @click.stop="toggleTask(task.id)"
             >
               <el-icon v-if="task.completed"><Check /></el-icon>
             </button>
@@ -310,9 +314,6 @@ function taskMeta(task) {
             </div>
 
             <div class="todo-actions">
-              <el-tooltip content="Edit task" placement="top">
-                <el-button :icon="EditPen" circle text size="small" @click="openEditDialog(task)" />
-              </el-tooltip>
               <el-tooltip content="Delete task" placement="top">
                 <el-button
                   :icon="Delete"
@@ -320,7 +321,7 @@ function taskMeta(task) {
                   text
                   type="danger"
                   size="small"
-                  @click="deleteTask(task.id)"
+                  @click.stop="deleteTask(task.id)"
                 />
               </el-tooltip>
             </div>
@@ -452,6 +453,15 @@ function taskMeta(task) {
   border-bottom: 1px solid #edf0f2;
   border-left: 4px solid transparent;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.todo-item:hover {
+  background: #fbfffd;
+  box-shadow: inset 0 0 0 1px #cfe6de;
 }
 
 .todo-item.completed {

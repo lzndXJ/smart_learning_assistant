@@ -247,6 +247,10 @@ function resetPlanner() {
   generatedPlan.value = null
 }
 
+function openPlan(plan) {
+  generatedPlan.value = plan
+}
+
 function formatPlanDate(dateString) {
   return new Date(dateString).toLocaleString('en-US', {
     month: 'short',
@@ -350,7 +354,15 @@ onBeforeUnmount(() => {
       <aside class="panel">
         <h2 class="section-title">Recent Plans</h2>
         <div v-if="plans.length" class="recent-plans">
-          <article v-for="plan in plans" :key="plan.id" class="recent-plan">
+          <article
+            v-for="plan in plans"
+            :key="plan.id"
+            class="recent-plan"
+            role="button"
+            tabindex="0"
+            @click="openPlan(plan)"
+            @keydown.enter="openPlan(plan)"
+          >
             <strong>{{ plan.subject }}</strong>
             <p>{{ plan.goal }}</p>
             <span>{{ formatPlanDate(plan.createdAt) }}</span>
@@ -359,11 +371,11 @@ onBeforeUnmount(() => {
                 size="small"
                 :icon="Plus"
                 :disabled="isPlanTaskAdded(plan)"
-                @click="addPlanToTasks(plan)"
+                @click.stop="addPlanToTasks(plan)"
               >
                 {{ isPlanTaskAdded(plan) ? 'In Tasks' : 'Add task' }}
               </el-button>
-              <el-button size="small" type="danger" plain :icon="Delete" @click="deletePlan(plan)">
+              <el-button size="small" type="danger" plain :icon="Delete" @click.stop="deletePlan(plan)">
                 Delete
               </el-button>
             </div>
@@ -470,6 +482,17 @@ li span,
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.recent-plan:hover {
+  border-color: #99cabb;
+  box-shadow: 0 8px 24px rgba(33, 100, 80, 0.08);
+  transform: translateY(-1px);
 }
 
 .recent-plan-actions {

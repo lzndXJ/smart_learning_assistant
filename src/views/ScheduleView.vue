@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Calendar, Delete, EditPen, Plus } from '@element-plus/icons-vue'
+import { Calendar, Delete, Plus } from '@element-plus/icons-vue'
 import CourseEditorDialog from '@/components/CourseEditorDialog.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -149,6 +149,10 @@ function deleteCourse(courseId) {
             :key="course.id"
             class="course-card"
             :style="{ borderLeftColor: course.color }"
+            role="button"
+            tabindex="0"
+            @click="openEditDialog(course)"
+            @keydown.enter="openEditDialog(course)"
           >
             <div class="course-content">
               <span>{{ course.startTime }} - {{ course.endTime }}</span>
@@ -157,9 +161,6 @@ function deleteCourse(courseId) {
             </div>
 
             <div class="course-actions">
-              <el-tooltip content="Edit course" placement="top">
-                <el-button :icon="EditPen" circle text size="small" @click="openEditDialog(course)" />
-              </el-tooltip>
               <el-tooltip content="Delete course" placement="top">
                 <el-button
                   :icon="Delete"
@@ -167,7 +168,7 @@ function deleteCourse(courseId) {
                   text
                   type="danger"
                   size="small"
-                  @click="deleteCourse(course.id)"
+                  @click.stop="deleteCourse(course.id)"
                 />
               </el-tooltip>
             </div>
@@ -242,6 +243,17 @@ h2 {
   border-left: 5px solid;
   border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.course-card:hover {
+  border-color: #99cabb;
+  box-shadow: 0 8px 24px rgba(33, 100, 80, 0.08);
+  transform: translateY(-1px);
 }
 
 .course-content {

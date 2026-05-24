@@ -1,7 +1,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, EditPen, Link, Plus } from '@element-plus/icons-vue'
+import { Delete, Link, Plus } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { loadLearningData, saveLearningSection } from '@/utils/storage'
@@ -9,7 +9,6 @@ import { loadLearningData, saveLearningSection } from '@/utils/storage'
 const initialData = loadLearningData()
 const courses = ref(initialData.courses)
 const resources = ref(initialData.resources)
-const tasks = ref(initialData.tasks)
 
 const dialogVisible = ref(false)
 const editingResourceId = ref('')
@@ -35,12 +34,6 @@ const filteredResources = computed(() => {
     const searchableText = `${resource.title} ${resource.type} ${resource.course} ${resource.note}`.toLowerCase()
     return matchesCourse && (!query || searchableText.includes(query))
   })
-})
-
-const dueSoonTasks = computed(() => {
-  return tasks.value
-    .filter((task) => !task.completed && daysUntil(task.dueDate) <= 3)
-    .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
 })
 
 function createEmptyResource() {
@@ -115,20 +108,6 @@ function typeTag(type) {
   }[type] || 'info'
 }
 
-function daysUntil(dateString) {
-  if (!dateString) return 999
-  const today = new Date()
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const target = new Date(`${dateString}T00:00:00`)
-  return Math.ceil((target - start) / 86400000)
-}
-
-function deadlineText(dateString) {
-  const days = daysUntil(dateString)
-  if (days < 0) return `${Math.abs(days)} day(s) overdue`
-  if (days === 0) return 'Due today'
-  return `${days} day(s) left`
-}
 </script>
 
 <template>
@@ -166,7 +145,15 @@ function deadlineText(dateString) {
         </div>
 
         <div v-if="filteredResources.length" class="resource-grid">
-          <article v-for="resource in filteredResources" :key="resource.id" class="resource-card">
+          <article
+            v-for="resource in filteredResources"
+            :key="resource.id"
+            class="resource-card"
+            role="button"
+            tabindex="0"
+            @click="openEditDialog(resource)"
+            @keydown.enter="openEditDialog(resource)"
+          >
             <div class="resource-head">
               <div>
                 <h3>{{ resource.title }}</h3>
@@ -178,13 +165,18 @@ function deadlineText(dateString) {
 
               <div class="card-actions">
                 <el-tooltip content="Open resource" placement="top">
-                  <el-button :icon="Link" circle text tag="a" :href="resource.url" target="_blank" />
-                </el-tooltip>
-                <el-tooltip content="Edit resource" placement="top">
-                  <el-button :icon="EditPen" circle text @click="openEditDialog(resource)" />
+                  <el-button
+                    :icon="Link"
+                    circle
+                    text
+                    tag="a"
+                    :href="resource.url"
+                    target="_blank"
+                    @click.stop
+                  />
                 </el-tooltip>
                 <el-tooltip content="Delete resource" placement="top">
-                  <el-button :icon="Delete" circle text type="danger" @click="deleteResource(resource.id)" />
+                  <el-button :icon="Delete" circle text type="danger" @click.stop="deleteResource(resource.id)" />
                 </el-tooltip>
               </div>
             </div>
@@ -197,20 +189,6 @@ function deadlineText(dateString) {
           <el-button type="primary" :icon="Plus" @click="openAddDialog">Add resource</el-button>
         </EmptyState>
       </section>
-
-      <aside class="panel">
-        <h2 class="section-title">Deadline Reminders</h2>
-        <div v-if="dueSoonTasks.length" class="reminder-list">
-          <article v-for="task in dueSoonTasks" :key="task.id" class="reminder-card">
-            <strong>{{ task.title }}</strong>
-            <span>{{ task.course || 'No course linked' }}</span>
-            <el-tag :type="daysUntil(task.dueDate) <= 0 ? 'danger' : 'warning'" size="small">
-              {{ deadlineText(task.dueDate) }}
-            </el-tag>
-          </article>
-        </div>
-        <EmptyState v-else description="No urgent deadline within three days." />
-      </aside>
     </div>
 
     <el-dialog
@@ -260,10 +238,7 @@ function deadlineText(dateString) {
 
 <style scoped>
 .resource-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  gap: 16px;
-  align-items: start;
+  display: block;
 }
 
 .resource-toolbar {
@@ -286,8 +261,7 @@ function deadlineText(dateString) {
   gap: 12px;
 }
 
-.resource-card,
-.reminder-card {
+.resource-card {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
@@ -297,6 +271,17 @@ function deadlineText(dateString) {
   display: grid;
   gap: 12px;
   padding: 16px;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.resource-card:hover {
+  border-color: #99cabb;
+  box-shadow: 0 8px 24px rgba(33, 100, 80, 0.08);
+  transform: translateY(-1px);
 }
 
 .resource-head {
@@ -333,26 +318,6 @@ h3 {
   gap: 2px;
 }
 
-.reminder-list {
-  display: grid;
-  gap: 10px;
-}
-
-.reminder-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-}
-
-.reminder-card strong {
-  color: var(--text-strong);
-  font-weight: 800;
-}
-
-.reminder-card span {
-  color: var(--text-muted);
-}
-
 .resource-form {
   display: grid;
   gap: 2px;
@@ -365,7 +330,6 @@ h3 {
 }
 
 @media (max-width: 980px) {
-  .resource-layout,
   .resource-toolbar {
     grid-template-columns: 1fr;
   }

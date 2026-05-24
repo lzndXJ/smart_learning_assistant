@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Delete, EditPen } from '@element-plus/icons-vue'
+import { Delete } from '@element-plus/icons-vue'
 import EmptyState from './EmptyState.vue'
 
 const props = defineProps({
@@ -22,7 +22,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['toggle', 'edit', 'delete'])
+const emit = defineEmits(['toggle', 'edit', 'delete', 'row-click'])
 
 const visibleTasks = computed(() => {
   return props.compact ? props.tasks.slice(0, 5) : props.tasks
@@ -50,10 +50,19 @@ function formatDueDate(dateString) {
 
 <template>
   <div class="task-list">
-    <article v-for="task in visibleTasks" :key="task.id" class="task-row">
+    <article
+      v-for="task in visibleTasks"
+      :key="task.id"
+      class="task-row"
+      role="button"
+      tabindex="0"
+      @click="emit('row-click', task)"
+      @keydown.enter="emit('row-click', task)"
+    >
       <el-checkbox
         :model-value="task.completed"
         size="large"
+        @click.stop
         @change="emit('toggle', task.id)"
       />
 
@@ -74,11 +83,8 @@ function formatDueDate(dateString) {
       </div>
 
       <div v-if="showActions" class="task-actions">
-        <el-tooltip content="Edit task" placement="top">
-          <el-button :icon="EditPen" circle text @click="emit('edit', task)" />
-        </el-tooltip>
         <el-tooltip content="Delete task" placement="top">
-          <el-button :icon="Delete" circle text type="danger" @click="emit('delete', task.id)" />
+          <el-button :icon="Delete" circle text type="danger" @click.stop="emit('delete', task.id)" />
         </el-tooltip>
       </div>
     </article>
@@ -104,6 +110,17 @@ function formatDueDate(dateString) {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.task-row:hover {
+  border-color: #99cabb;
+  box-shadow: 0 8px 24px rgba(33, 100, 80, 0.08);
+  transform: translateY(-1px);
 }
 
 .task-main {

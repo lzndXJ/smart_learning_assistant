@@ -224,7 +224,15 @@ function toggleTask(taskId) {
           </el-tag>
         </div>
         <div v-if="dueSoonTasks.length" class="reminder-list">
-          <article v-for="task in dueSoonTasks.slice(0, 4)" :key="task.id" class="reminder-item">
+          <article
+            v-for="task in dueSoonTasks.slice(0, 4)"
+            :key="task.id"
+            class="reminder-item"
+            role="button"
+            tabindex="0"
+            @click="router.push('/tasks')"
+            @keydown.enter="router.push('/tasks')"
+          >
             <div>
               <strong>{{ task.title }}</strong>
               <p>{{ task.course || 'No course linked' }}</p>
@@ -253,7 +261,15 @@ function toggleTask(taskId) {
       <section class="panel">
         <h2 class="section-title">Today's Classes</h2>
         <div v-if="todaysClasses.length" class="class-list">
-          <article v-for="course in todaysClasses" :key="course.id" class="class-item">
+          <article
+            v-for="course in todaysClasses"
+            :key="course.id"
+            class="class-item"
+            role="button"
+            tabindex="0"
+            @click="router.push('/schedule')"
+            @keydown.enter="router.push('/schedule')"
+          >
             <span class="course-color" :style="{ backgroundColor: course.color }"></span>
             <div>
               <h3>{{ course.name }}</h3>
@@ -275,6 +291,7 @@ function toggleTask(taskId) {
           :show-actions="false"
           empty-text="No pending tasks due today."
           @toggle="toggleTask"
+          @row-click="router.push('/tasks')"
         />
       </section>
 
@@ -298,7 +315,14 @@ function toggleTask(taskId) {
 
       <section class="panel">
         <h2 class="section-title">Latest Study Plan</h2>
-        <div v-if="latestPlan" class="latest-plan">
+        <div
+          v-if="latestPlan"
+          class="latest-plan"
+          role="button"
+          tabindex="0"
+          @click="router.push('/planner')"
+          @keydown.enter="router.push('/planner')"
+        >
           <strong>{{ latestPlan.subject }}</strong>
           <p>{{ latestPlan.time }} · {{ latestPlan.goal }}</p>
         </div>
@@ -357,6 +381,19 @@ function toggleTask(taskId) {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.reminder-item:hover,
+.class-item:hover,
+.latest-plan:hover {
+  border-color: #99cabb;
+  box-shadow: 0 8px 24px rgba(33, 100, 80, 0.08);
+  transform: translateY(-1px);
 }
 
 .ai-copy {
@@ -374,6 +411,11 @@ function toggleTask(taskId) {
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .course-color {
@@ -388,6 +430,18 @@ h3,
   margin: 0;
   color: var(--text-strong);
   font-weight: 700;
+}
+
+.latest-plan {
+  padding: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .class-item p,
