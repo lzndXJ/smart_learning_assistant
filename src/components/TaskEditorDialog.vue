@@ -31,11 +31,11 @@ function createEmptyTask() {
     id: '',
     title: '',
     course: '',
-    category: 'General',
+    category: '',
     priority: 'Medium',
-    dueDate: new Date().toISOString().slice(0, 10),
+    dueDate: '',
     completed: false,
-    estimatedMinutes: 45,
+    estimatedMinutes: null,
     notes: '',
   }
 }
@@ -67,10 +67,10 @@ function saveTask() {
   emit('save', {
     ...form,
     title: form.title.trim(),
-    category: form.category.trim() || 'General',
+    category: form.category.trim(),
     course: form.course || '',
     notes: form.notes.trim(),
-    estimatedMinutes: Number(form.estimatedMinutes) || 45,
+    estimatedMinutes: form.estimatedMinutes === null ? null : Number(form.estimatedMinutes) || null,
   })
 
   visible.value = false
@@ -126,15 +126,19 @@ function saveTask() {
         </el-form-item>
       </div>
 
-      <el-form-item label="Estimated study time">
+      <el-form-item label="Estimated study time (optional)">
         <el-input-number
           v-model="form.estimatedMinutes"
           :min="15"
           :max="360"
           :step="15"
           controls-position="right"
+          placeholder="Optional"
         />
         <span class="time-hint">minutes</span>
+        <el-button v-if="form.estimatedMinutes !== null" text type="primary" @click="form.estimatedMinutes = null">
+          Clear
+        </el-button>
       </el-form-item>
 
       <el-form-item label="Notes">

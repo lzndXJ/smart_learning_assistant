@@ -192,13 +192,16 @@ function deleteCourse(courseId) {
 <style scoped>
 .schedule-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .day-column {
-  min-height: 260px;
-  padding: 16px;
+  min-width: 190px;
+  min-height: 420px;
+  padding: 18px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--panel-background);
@@ -233,12 +236,13 @@ h2 {
 
 .course-stack {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .course-card {
   position: relative;
-  padding: 14px 46px 14px 14px;
+  min-height: 154px;
+  padding: 18px 46px 18px 16px;
   border: 1px solid var(--app-border);
   border-left: 5px solid;
   border-radius: 8px;
@@ -262,7 +266,7 @@ h2 {
 
 .course-card span {
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   font-weight: 700;
 }
 
@@ -270,7 +274,7 @@ h2 {
   display: block;
   margin-top: 4px;
   color: var(--text-strong);
-  font-size: 0.96rem;
+  font-size: 1.02rem;
   font-weight: 800;
   line-height: 1.35;
   overflow-wrap: break-word;
@@ -279,7 +283,7 @@ h2 {
 }
 
 .course-card p {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: var(--text-muted);
 }
 
@@ -289,6 +293,12 @@ h2 {
   top: 8px;
   right: 8px;
   gap: 2px;
+}
+
+@media (max-width: 1320px) {
+  .schedule-board {
+    grid-template-columns: repeat(7, minmax(190px, 1fr));
+  }
 }
 
 @media (hover: hover) {

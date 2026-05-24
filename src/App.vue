@@ -13,41 +13,37 @@ const navItems = [
 </script>
 
 <template>
-  <el-container class="app-shell">
-    <el-aside class="side-nav" width="260px">
-      <RouterLink to="/" class="brand-link">
-        <span class="brand-mark">SLA</span>
-        <span>
-          <strong>Smart Learning</strong>
-          <small>Assistant</small>
-        </span>
-      </RouterLink>
-
-      <nav class="nav-list" aria-label="Main navigation">
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="nav-link"
-          exact-active-class="is-active"
-        >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
+  <div class="app-shell">
+    <header class="top-nav">
+      <div class="nav-pill">
+        <RouterLink to="/" class="brand-link">
+          <span class="brand-mark">SLA</span>
+          <span>
+            <strong>Smart Learning</strong>
+            <small>Assistant</small>
+          </span>
         </RouterLink>
-      </nav>
-    </el-aside>
 
-    <el-container class="main-panel">
-      <el-header class="top-bar">
-        <span class="workspace-label">Student workspace</span>
-        <el-tag effect="plain" type="success">Local demo version</el-tag>
-      </el-header>
+        <nav class="nav-list" aria-label="Main navigation">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-link"
+            exact-active-class="is-active"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </RouterLink>
+        </nav>
 
-      <el-main class="content-area">
-        <RouterView />
-      </el-main>
-    </el-container>
-  </el-container>
+      </div>
+    </header>
+
+    <main class="content-area">
+      <RouterView />
+    </main>
+  </div>
 </template>
 
 <style scoped>
@@ -56,22 +52,37 @@ const navItems = [
   background: var(--app-background);
 }
 
-.side-nav {
+.top-nav {
   position: sticky;
   top: 0;
-  height: 100vh;
-  padding: 24px 18px;
-  border-right: 1px solid var(--app-border);
-  background: var(--panel-background);
+  z-index: 20;
+  padding: 16px 14px 8px;
+  background: linear-gradient(180deg, rgba(246, 247, 249, 0.98), rgba(246, 247, 249, 0.72));
+  backdrop-filter: blur(12px);
+}
+
+.nav-pill {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 34px;
+  max-width: 1720px;
+  min-height: 76px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 42px rgba(28, 37, 34, 0.08);
 }
 
 .brand-link {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   color: var(--text-strong);
   text-decoration: none;
-  padding: 8px 6px 24px;
+  white-space: nowrap;
 }
 
 .brand-link strong,
@@ -81,16 +92,20 @@ const navItems = [
 
 .brand-link small {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   margin-top: 2px;
+}
+
+.brand-link strong {
+  font-size: 1.08rem;
 }
 
 .brand-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 50px;
+  height: 50px;
   border-radius: 8px;
   background: #2f7d68;
   color: #ffffff;
@@ -99,20 +114,24 @@ const navItems = [
 }
 
 .nav-list {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .nav-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 46px;
+  padding: 10px 16px;
   border-radius: 8px;
   color: var(--text-muted);
   text-decoration: none;
   font-weight: 600;
+  font-size: 1.02rem;
+  white-space: nowrap;
 }
 
 .nav-link:hover,
@@ -121,71 +140,53 @@ const navItems = [
   color: #216450;
 }
 
-.main-panel {
-  min-width: 0;
-}
-
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-  padding: 0 32px;
-  border-bottom: 1px solid var(--app-border);
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(12px);
-}
-
-.workspace-label {
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
 .content-area {
-  padding: 28px 32px 40px;
+  width: min(96vw, 1720px);
+  max-width: none;
+  margin: 0 auto;
+  padding: 28px 14px 40px;
 }
 
-@media (max-width: 860px) {
-  .app-shell {
-    display: block;
-  }
-
-  .side-nav {
-    position: static;
-    width: 100% !important;
-    height: auto;
-    padding: 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--app-border);
-  }
-
-  .brand-link {
-    padding-bottom: 14px;
-  }
-
-  .nav-list {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .nav-link {
-    justify-content: center;
-    min-height: 42px;
-    padding: 8px;
-  }
-
-  .nav-link span {
-    display: none;
-  }
-
-  .top-bar {
-    height: auto;
-    padding: 16px;
+@media (max-width: 1080px) {
+  .nav-pill {
+    grid-template-columns: 1fr auto;
     gap: 12px;
   }
 
+  .nav-list {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
+@media (max-width: 640px) {
+  .top-nav {
+    padding: 10px 10px 4px;
+  }
+
+  .nav-pill {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .brand-link {
+    flex: 1 1 100%;
+  }
+
+  .nav-list {
+    order: 3;
+    width: 100%;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+  }
+
   .content-area {
-    padding: 20px 16px 32px;
+    width: 100%;
+    padding: 20px 10px 32px;
   }
 }
 </style>

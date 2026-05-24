@@ -166,7 +166,7 @@ export function loadLearningData() {
       ...savedData,
       courses: Array.isArray(savedData.courses) ? savedData.courses : defaults.courses,
       tasks: Array.isArray(savedData.tasks)
-        ? savedData.tasks.map((task) => ({ estimatedMinutes: 45, ...task }))
+        ? savedData.tasks
         : defaults.tasks,
       resources: Array.isArray(savedData.resources) ? savedData.resources : defaults.resources,
       plans: Array.isArray(savedData.plans) ? savedData.plans : defaults.plans,

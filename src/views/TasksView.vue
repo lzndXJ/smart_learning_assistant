@@ -215,7 +215,9 @@ function priorityText(priority) {
 }
 
 function taskMeta(task) {
-  return [task.category || 'General', task.course || 'No course linked'].filter(Boolean).join(' · ')
+  return [task.category, task.course, task.estimatedMinutes ? `${task.estimatedMinutes} min` : '']
+    .filter(Boolean)
+    .join(' · ')
 }
 </script>
 
@@ -309,7 +311,7 @@ function taskMeta(task) {
                   {{ priorityText(task.priority) }}
                 </span>
               </div>
-              <p>{{ taskMeta(task) }}</p>
+              <p v-if="taskMeta(task)">{{ taskMeta(task) }}</p>
               <p v-if="task.notes" class="task-notes">{{ task.notes }}</p>
             </div>
 
@@ -335,8 +337,6 @@ function taskMeta(task) {
         </template>
       </EmptyState>
     </section>
-
-    <el-button class="floating-add" type="primary" :icon="Plus" circle @click="openAddDialog" />
 
     <TaskEditorDialog
       v-model="dialogVisible"
@@ -531,16 +531,6 @@ function taskMeta(task) {
   gap: 2px;
 }
 
-.floating-add {
-  position: fixed;
-  right: 32px;
-  bottom: 32px;
-  z-index: 10;
-  width: 58px;
-  height: 58px;
-  box-shadow: 0 12px 28px rgba(15, 143, 135, 0.28);
-}
-
 @media (max-width: 820px) {
   .task-toolbar {
     grid-template-columns: 1fr;
@@ -563,9 +553,5 @@ function taskMeta(task) {
     gap: 4px;
   }
 
-  .floating-add {
-    right: 18px;
-    bottom: 18px;
-  }
 }
 </style>

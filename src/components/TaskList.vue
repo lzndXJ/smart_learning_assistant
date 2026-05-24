@@ -39,12 +39,19 @@ function priorityType(priority) {
 }
 
 function formatDueDate(dateString) {
-  if (!dateString) return 'No due date'
-
   return new Date(`${dateString}T00:00:00`).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function taskMetaItems(task) {
+  return [
+    task.category,
+    task.course,
+    task.dueDate ? `Due ${formatDueDate(task.dueDate)}` : '',
+    task.estimatedMinutes ? `${task.estimatedMinutes} min` : '',
+  ].filter(Boolean)
 }
 </script>
 
@@ -75,10 +82,7 @@ function formatDueDate(dateString) {
         </div>
 
         <div class="task-meta">
-          <span>{{ task.category || 'General' }}</span>
-          <span>{{ task.course || 'No course linked' }}</span>
-          <span>Due {{ formatDueDate(task.dueDate) }}</span>
-          <span>{{ task.estimatedMinutes || 45 }} min</span>
+          <span v-for="item in taskMetaItems(task)" :key="item">{{ item }}</span>
         </div>
       </div>
 
