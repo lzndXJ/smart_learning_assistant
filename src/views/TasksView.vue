@@ -1,12 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Calendar, Check, Delete, EditPen, Plus } from '@element-plus/icons-vue'
+import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import MetricCard from '@/components/MetricCard.vue'
 import TaskEditorDialog from '@/components/TaskEditorDialog.vue'
-import TaskList from '@/components/TaskList.vue'
-import { loadLearningData, saveLearningSection } from '@/utils/storage'
+import { getTodayISO, loadLearningData, saveLearningSection } from '@/utils/storage'
 
 const initialData = loadLearningData()
 const courses = ref(initialData.courses)
@@ -22,6 +21,9 @@ const priorityOrder = {
   Medium: 2,
   Low: 3,
 }
+
+const todayISO = getTodayISO()
+const tomorrowISO = addDaysISO(1)
 
 const taskStats = computed(() => {
   const total = tasks.value.length
@@ -54,6 +56,32 @@ const completionRate = computed(() => {
   if (taskStats.value.total === 0) return 0
   return Math.round((taskStats.value.completed / taskStats.value.total) * 100)
 })
+
+const groupedTasks = computed(() => {
+  const groups = new Map()
+
+  filteredTasks.value.forEach((task) => {
+    const groupKey = task.dueDate || 'no-date'
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        key: groupKey,
+        ...formatGroupLabel(groupKey),
+        tasks: [],
+      })
+    }
+
+    groups.get(groupKey).tasks.push(task)
+  })
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      tasks: group.tasks.sort(sortTasksWithinDay),
+    }))
+    .sort((a, b) => sortGroups(a.key, b.key))
+})
+
+const hasVisibleTasks = computed(() => groupedTasks.value.some((group) => group.tasks.length))
 
 function openAddDialog() {
   editingTask.value = null
@@ -104,30 +132,111 @@ function deleteTask(taskId) {
     })
     .catch(() => {})
 }
+
+function addDaysISO(daysToAdd) {
+  const date = new Date()
+  date.setDate(date.getDate() + daysToAdd)
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 10)
+}
+
+function dateFromISO(dateString) {
+  return new Date(`${dateString}T00:00:00`)
+}
+
+function formatGroupLabel(dateString) {
+  if (dateString === 'no-date') {
+    return {
+      label: 'No date',
+      detail: 'Unscheduled',
+      tone: 'neutral',
+    }
+  }
+
+  const date = dateFromISO(dateString)
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'short' })
+
+  if (dateString === todayISO) {
+    return {
+      label: 'Today',
+      detail: weekday,
+      tone: 'today',
+    }
+  }
+
+  if (dateString === tomorrowISO) {
+    return {
+      label: 'Tomorrow',
+      detail: weekday,
+      tone: 'upcoming',
+    }
+  }
+
+  if (dateString < todayISO) {
+    return {
+      label: 'Overdue',
+      detail: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' }),
+      tone: 'overdue',
+    }
+  }
+
+  return {
+    label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    detail: weekday,
+    tone: 'upcoming',
+  }
+}
+
+function sortGroups(firstKey, secondKey) {
+  if (firstKey === 'no-date') return 1
+  if (secondKey === 'no-date') return -1
+  return firstKey.localeCompare(secondKey)
+}
+
+function sortTasksWithinDay(firstTask, secondTask) {
+  if (firstTask.completed !== secondTask.completed) return firstTask.completed ? 1 : -1
+  return (priorityOrder[firstTask.priority] || 4) - (priorityOrder[secondTask.priority] || 4)
+}
+
+function priorityColor(priority) {
+  const colors = {
+    High: '#f56c6c',
+    Medium: '#e6a23c',
+    Low: '#14b8a6',
+  }
+
+  return colors[priority] || '#909399'
+}
+
+function priorityText(priority) {
+  return `${priority || 'Normal'} priority`
+}
+
+function taskMeta(task) {
+  return [task.category || 'General', task.course || 'No course linked'].filter(Boolean).join(' · ')
+}
 </script>
 
 <template>
-  <div class="page-stack">
+  <div class="page-stack tasks-page">
     <PageHeader
-      eyebrow="Task board"
-      title="Flexible task management"
-      description="Add quick work items, connect them to courses, and keep progress visible with simple feedback."
+      eyebrow="Todo list"
+      title="Tasks"
+      description="Review study work by date, complete items quickly, and keep upcoming tasks visible."
     >
       <template #actions>
         <el-button type="primary" :icon="Plus" @click="openAddDialog">Add task</el-button>
       </template>
     </PageHeader>
 
-    <div class="responsive-grid">
-      <MetricCard title="All tasks" :value="taskStats.total" detail="Stored locally" />
-      <MetricCard title="Pending" :value="taskStats.pending" detail="Ready to work on" tone="blue" />
-      <MetricCard title="Completed" :value="`${completionRate}%`" detail="Completion rate" tone="amber" />
-    </div>
-
-    <section class="panel">
+    <section class="todo-shell">
       <div class="task-toolbar">
-        <div>
-          <h2 class="section-title">Tasks</h2>
+        <div class="task-progress">
+          <div class="progress-title">
+            <el-icon><Calendar /></el-icon>
+            <span>{{ taskStats.pending }} pending</span>
+            <strong>{{ completionRate }}%</strong>
+          </div>
           <el-progress :percentage="completionRate" :stroke-width="10" />
         </div>
 
@@ -147,18 +256,74 @@ function deleteTask(taskId) {
         </div>
       </div>
 
-      <TaskList
-        :tasks="filteredTasks"
-        empty-text="No tasks match the current filters."
-        @toggle="toggleTask"
-        @edit="openEditDialog"
-        @delete="deleteTask"
-      >
-        <template #empty-action>
+      <div v-if="hasVisibleTasks" class="date-task-list">
+        <section
+          v-for="group in groupedTasks"
+          :key="group.key"
+          class="date-section"
+          :class="`tone-${group.tone}`"
+        >
+          <header class="date-divider">
+            <strong>{{ group.label }}</strong>
+            <span>{{ group.detail }}</span>
+          </header>
+
+          <article
+            v-for="task in group.tasks"
+            :key="task.id"
+            class="todo-item"
+            :class="{ completed: task.completed }"
+            :style="{ borderLeftColor: priorityColor(task.priority) }"
+          >
+            <button
+              type="button"
+              class="check-button"
+              :class="{ checked: task.completed }"
+              :style="{ borderColor: priorityColor(task.priority), backgroundColor: task.completed ? priorityColor(task.priority) : '#ffffff' }"
+              :aria-label="task.completed ? 'Mark task as pending' : 'Mark task as completed'"
+              @click="toggleTask(task.id)"
+            >
+              <el-icon v-if="task.completed"><Check /></el-icon>
+            </button>
+
+            <div class="todo-content">
+              <div class="todo-title-row">
+                <h2>{{ task.title }}</h2>
+                <span class="priority-chip" :style="{ color: priorityColor(task.priority) }">
+                  {{ priorityText(task.priority) }}
+                </span>
+              </div>
+              <p>{{ taskMeta(task) }}</p>
+              <p v-if="task.notes" class="task-notes">{{ task.notes }}</p>
+            </div>
+
+            <div class="todo-actions">
+              <el-tooltip content="Edit task" placement="top">
+                <el-button :icon="EditPen" circle text size="small" @click="openEditDialog(task)" />
+              </el-tooltip>
+              <el-tooltip content="Delete task" placement="top">
+                <el-button
+                  :icon="Delete"
+                  circle
+                  text
+                  type="danger"
+                  size="small"
+                  @click="deleteTask(task.id)"
+                />
+              </el-tooltip>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <EmptyState v-else description="No tasks match the current filters.">
+        <template #default>
           <el-button type="primary" :icon="Plus" @click="openAddDialog">Add task</el-button>
         </template>
-      </TaskList>
+      </EmptyState>
     </section>
+
+    <el-button class="floating-add" type="primary" :icon="Plus" circle @click="openAddDialog" />
 
     <TaskEditorDialog
       v-model="dialogVisible"
@@ -170,12 +335,44 @@ function deleteTask(taskId) {
 </template>
 
 <style scoped>
+.tasks-page {
+  position: relative;
+}
+
+.todo-shell {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
 .task-toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) auto;
   gap: 16px;
   align-items: end;
-  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--app-border);
+  background: #ffffff;
+}
+
+.task-progress {
+  display: grid;
+  gap: 10px;
+}
+
+.progress-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f8f87;
+  font-weight: 800;
+}
+
+.progress-title strong {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .filters {
@@ -189,6 +386,138 @@ function deleteTask(taskId) {
   width: 160px;
 }
 
+.date-task-list {
+  display: grid;
+}
+
+.date-section {
+  display: grid;
+}
+
+.date-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  background: #e5f6f4;
+  color: #0f8f87;
+  font-size: 0.9rem;
+}
+
+.date-divider strong {
+  font-weight: 800;
+}
+
+.date-divider span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.tone-overdue .date-divider {
+  background: #fff1f0;
+  color: #cf4b45;
+}
+
+.tone-upcoming .date-divider {
+  background: #eef5ff;
+  color: #3867d6;
+}
+
+.tone-neutral .date-divider {
+  background: #f2f4f5;
+  color: var(--text-muted);
+}
+
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  min-height: 76px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #edf0f2;
+  border-left: 4px solid transparent;
+  background: #ffffff;
+}
+
+.todo-item.completed {
+  background: #fbfcfc;
+}
+
+.check-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 3px;
+  border: 2px solid;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.todo-content {
+  min-width: 0;
+}
+
+.todo-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.todo-title-row h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.completed .todo-title-row h2,
+.completed .todo-content p {
+  color: #9aa5a2;
+  text-decoration: line-through;
+}
+
+.priority-chip {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.todo-content p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+}
+
+.task-notes {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 0.9rem;
+}
+
+.todo-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.floating-add {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 10;
+  width: 58px;
+  height: 58px;
+  box-shadow: 0 12px 28px rgba(15, 143, 135, 0.28);
+}
+
 @media (max-width: 820px) {
   .task-toolbar {
     grid-template-columns: 1fr;
@@ -196,6 +525,24 @@ function deleteTask(taskId) {
 
   .filters {
     justify-content: flex-start;
+  }
+
+  .todo-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .todo-actions {
+    grid-column: 2;
+  }
+
+  .todo-title-row {
+    display: grid;
+    gap: 4px;
+  }
+
+  .floating-add {
+    right: 18px;
+    bottom: 18px;
   }
 }
 </style>

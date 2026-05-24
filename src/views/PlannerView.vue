@@ -1,13 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Back, Check, Microphone, Refresh, Right, VideoPause } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Back, Check, Delete, Microphone, Plus, Refresh, Right, VideoPause } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { loadLearningData, saveLearningSection } from '@/utils/storage'
+import { getTodayISO, loadLearningData, saveLearningSection } from '@/utils/storage'
 
 const initialData = loadLearningData()
 const plans = ref(initialData.plans)
+const tasks = ref(initialData.tasks)
+const courses = ref(initialData.courses)
 
 const steps = [
   {
@@ -38,11 +40,15 @@ const answers = reactive({
 })
 const generatedPlan = ref(null)
 const isListening = ref(false)
+const languageMode = ref('en-US')
 let recognition = null
 
 const currentStep = computed(() => steps[currentStepIndex.value])
 const voiceSupported = computed(() => {
   return typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+})
+const activeVoiceLanguageLabel = computed(() => {
+  return languageMode.value === 'zh-CN' ? 'Chinese' : 'English'
 })
 
 function nextStep() {
@@ -72,7 +78,7 @@ function startVoiceInput() {
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
   recognition = new SpeechRecognition()
-  recognition.lang = 'en-US'
+  recognition.lang = languageMode.value
   recognition.interimResults = false
   recognition.maxAlternatives = 1
 
@@ -116,6 +122,99 @@ function generatePlan() {
   plans.value = [plan, ...plans.value].slice(0, 5)
   saveLearningSection('plans', plans.value)
   ElMessage.success('Study plan saved locally.')
+}
+
+function addPlanToTasks(plan) {
+  if (!plan) return
+
+  const latestData = loadLearningData()
+  tasks.value = latestData.tasks
+
+  if (isPlanTaskAdded(plan)) {
+    ElMessage.info('This plan is already in Tasks.')
+    return
+  }
+
+  const task = createTaskFromPlan(plan)
+  tasks.value = [task, ...tasks.value]
+  saveLearningSection('tasks', tasks.value)
+
+  plans.value = plans.value.map((savedPlan) =>
+    savedPlan.id === plan.id ? { ...savedPlan, taskId: task.id } : savedPlan,
+  )
+  saveLearningSection('plans', plans.value)
+
+  if (generatedPlan.value?.id === plan.id) {
+    generatedPlan.value = { ...generatedPlan.value, taskId: task.id }
+  }
+
+  ElMessage.success('Added to Tasks.')
+}
+
+function deletePlan(plan) {
+  if (!plan) return
+
+  const latestData = loadLearningData()
+  const linkedTaskExists = plan.taskId && latestData.tasks.some((task) => task.id === plan.taskId)
+  const message = linkedTaskExists
+    ? 'This plan and its linked task will be removed.'
+    : 'This plan will be removed from Recent Plans.'
+
+  ElMessageBox.confirm(message, 'Delete plan?', {
+    confirmButtonText: 'Delete',
+    cancelButtonText: 'Cancel',
+    type: 'warning',
+  })
+    .then(() => {
+      const currentData = loadLearningData()
+
+      plans.value = currentData.plans.filter((savedPlan) => savedPlan.id !== plan.id)
+      saveLearningSection('plans', plans.value)
+
+      if (plan.taskId) {
+        tasks.value = currentData.tasks.filter((task) => task.id !== plan.taskId)
+        saveLearningSection('tasks', tasks.value)
+      } else {
+        tasks.value = currentData.tasks
+      }
+
+      if (generatedPlan.value?.id === plan.id) {
+        resetPlanner()
+      }
+
+      ElMessage.success(linkedTaskExists ? 'Plan and linked task deleted.' : 'Plan deleted.')
+    })
+    .catch(() => {})
+}
+
+function createTaskFromPlan(plan) {
+  const matchedCourse = courses.value.find((course) => {
+    return course.name.toLowerCase() === plan.subject.toLowerCase()
+  })
+
+  return {
+    id: `task-${Date.now()}`,
+    title: plan.goal || `Study ${plan.subject}`,
+    course: matchedCourse ? matchedCourse.name : '',
+    category: 'Study Plan',
+    priority: 'Medium',
+    dueDate: getTodayISO(),
+    completed: false,
+    notes: buildPlanNotes(plan),
+  }
+}
+
+function buildPlanNotes(plan) {
+  const planSteps = plan.steps
+    .map((step) => `${step.label}: ${step.minutes} min - ${step.detail}`)
+    .join('\n')
+
+  return `Subject: ${plan.subject}\nTime: ${plan.time}\nGoal: ${plan.goal}\n\n${planSteps}`
+}
+
+function isPlanTaskAdded(plan) {
+  if (!plan?.taskId) return false
+  return tasks.value.some((task) => task.id === plan.taskId)
 }
 
 function extractMinutes(timeText) {
@@ -188,6 +287,11 @@ onBeforeUnmount(() => {
           />
 
           <div class="voice-row">
+            <el-radio-group v-model="languageMode" size="small" :disabled="isListening">
+              <el-radio-button label="en-US">English</el-radio-button>
+              <el-radio-button label="zh-CN">Chinese</el-radio-button>
+            </el-radio-group>
+
             <el-button
               v-if="!isListening"
               :icon="Microphone"
@@ -200,7 +304,7 @@ onBeforeUnmount(() => {
               Stop listening
             </el-button>
             <span class="muted-text">
-              {{ voiceSupported ? 'Manual input is always available.' : 'Voice input is unavailable here.' }}
+              {{ voiceSupported ? `Voice language: ${activeVoiceLanguageLabel}` : 'Voice input is unavailable here.' }}
             </span>
           </div>
 
@@ -218,15 +322,28 @@ onBeforeUnmount(() => {
           <el-result icon="success" title="Today's study plan is ready" />
           <div class="plan-summary">
             <h2>{{ generatedPlan.subject }}</h2>
-            <p>{{ generatedPlan.time }} · {{ generatedPlan.goal }}</p>
+            <p>{{ generatedPlan.time }} - {{ generatedPlan.goal }}</p>
             <ol>
               <li v-for="item in generatedPlan.steps" :key="item.label">
-                <strong>{{ item.label }} · {{ item.minutes }} min</strong>
+                <strong>{{ item.label }} - {{ item.minutes }} min</strong>
                 <span>{{ item.detail }}</span>
               </li>
             </ol>
           </div>
-          <el-button :icon="Refresh" @click="resetPlanner">Plan another session</el-button>
+          <div class="result-actions">
+            <el-button
+              type="primary"
+              :icon="Plus"
+              :disabled="isPlanTaskAdded(generatedPlan)"
+              @click="addPlanToTasks(generatedPlan)"
+            >
+              {{ isPlanTaskAdded(generatedPlan) ? 'Added to Tasks' : 'Add to Tasks' }}
+            </el-button>
+            <el-button :icon="Refresh" @click="resetPlanner">Plan another session</el-button>
+            <el-button type="danger" plain :icon="Delete" @click="deletePlan(generatedPlan)">
+              Delete plan
+            </el-button>
+          </div>
         </div>
       </section>
 
@@ -237,6 +354,19 @@ onBeforeUnmount(() => {
             <strong>{{ plan.subject }}</strong>
             <p>{{ plan.goal }}</p>
             <span>{{ formatPlanDate(plan.createdAt) }}</span>
+            <div class="recent-plan-actions">
+              <el-button
+                size="small"
+                :icon="Plus"
+                :disabled="isPlanTaskAdded(plan)"
+                @click="addPlanToTasks(plan)"
+              >
+                {{ isPlanTaskAdded(plan) ? 'In Tasks' : 'Add task' }}
+              </el-button>
+              <el-button size="small" type="danger" plain :icon="Delete" @click="deletePlan(plan)">
+                Delete
+              </el-button>
+            </div>
           </article>
         </div>
         <EmptyState v-else description="Generated plans will appear here." />
@@ -290,6 +420,12 @@ h2 {
   gap: 10px;
 }
 
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .plan-summary {
   padding: 16px;
   border: 1px solid var(--app-border);
@@ -334,6 +470,10 @@ li span,
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.recent-plan-actions {
+  margin-top: 12px;
 }
 
 @media (max-width: 980px) {

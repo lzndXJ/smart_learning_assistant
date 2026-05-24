@@ -1,13 +1,18 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { Calendar } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Calendar, Delete, EditPen, Plus } from '@element-plus/icons-vue'
+import CourseEditorDialog from '@/components/CourseEditorDialog.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import { getWeekDays, loadLearningData } from '@/utils/storage'
+import { getWeekDays, loadLearningData, saveLearningSection } from '@/utils/storage'
 
 const initialData = loadLearningData()
 const courses = ref(initialData.courses)
+const tasks = ref(initialData.tasks)
 const weekDays = getWeekDays()
+const dialogVisible = ref(false)
+const editingCourse = ref(null)
 
 const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
 
@@ -17,6 +22,91 @@ function coursesForDay(day) {
   return courses.value
     .filter((course) => course.day === day)
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
+}
+
+function openAddDialog(day = todayName) {
+  editingCourse.value = {
+    day,
+  }
+  dialogVisible.value = true
+}
+
+function openEditDialog(course) {
+  editingCourse.value = { ...course }
+  dialogVisible.value = true
+}
+
+function saveCourse(courseData) {
+  const previousCourse = courses.value.find((course) => course.id === courseData.id)
+  const timeSlots = courseData.timeSlots?.length ? courseData.timeSlots : [courseData]
+
+  if (courseData.id) {
+    const [firstSlot, ...extraSlots] = timeSlots
+    const updatedCourse = buildCourseFromSlot(courseData, firstSlot, courseData.id)
+
+    courses.value = courses.value.map((course) =>
+      course.id === courseData.id ? updatedCourse : course,
+    )
+
+    if (extraSlots.length) {
+      courses.value = [
+        ...courses.value,
+        ...extraSlots.map((slot, index) => buildCourseFromSlot(courseData, slot, `course-${Date.now()}-${index}`)),
+      ]
+    }
+
+    ElMessage.success('Course updated.')
+  } else {
+    courses.value = [
+      ...courses.value,
+      ...timeSlots.map((slot, index) => buildCourseFromSlot(courseData, slot, `course-${Date.now()}-${index}`)),
+    ]
+    ElMessage.success('Course added.')
+  }
+
+  saveLearningSection('courses', courses.value)
+
+  if (previousCourse && previousCourse.name !== courseData.name) {
+    tasks.value = tasks.value.map((task) =>
+      task.course === previousCourse.name ? { ...task, course: courseData.name } : task,
+    )
+    saveLearningSection('tasks', tasks.value)
+  }
+}
+
+function buildCourseFromSlot(courseData, slot, id) {
+  return {
+    id,
+    name: courseData.name,
+    day: slot.day,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
+    room: slot.room,
+    color: courseData.color,
+  }
+}
+
+function deleteCourse(courseId) {
+  ElMessageBox.confirm('This course will be removed from your weekly schedule.', 'Delete course?', {
+    confirmButtonText: 'Delete',
+    cancelButtonText: 'Cancel',
+    type: 'warning',
+  })
+    .then(() => {
+      const deletedCourse = courses.value.find((course) => course.id === courseId)
+      courses.value = courses.value.filter((course) => course.id !== courseId)
+      saveLearningSection('courses', courses.value)
+
+      if (deletedCourse) {
+        tasks.value = tasks.value.map((task) =>
+          task.course === deletedCourse.name ? { ...task, course: '' } : task,
+        )
+        saveLearningSection('tasks', tasks.value)
+      }
+
+      ElMessage.success('Course deleted.')
+    })
+    .catch(() => {})
 }
 </script>
 
@@ -28,6 +118,7 @@ function coursesForDay(day) {
       description="A simple weekly structure for seeing where study tasks can fit around classes."
     >
       <template #actions>
+        <el-button type="primary" :icon="Plus" @click="openAddDialog()">Add course</el-button>
         <el-tag type="success" effect="plain">
           <el-icon><Calendar /></el-icon>
           {{ totalClasses }} classes
@@ -44,7 +135,12 @@ function coursesForDay(day) {
       >
         <div class="day-heading">
           <h2>{{ day }}</h2>
-          <el-tag v-if="day === todayName" size="small" type="success">Today</el-tag>
+          <div class="day-actions">
+            <el-tag v-if="day === todayName" size="small" type="success">Today</el-tag>
+            <el-tooltip content="Add course to this day" placement="top">
+              <el-button :icon="Plus" circle text size="small" @click="openAddDialog(day)" />
+            </el-tooltip>
+          </div>
         </div>
 
         <div v-if="coursesForDay(day).length" class="course-stack">
@@ -54,15 +150,41 @@ function coursesForDay(day) {
             class="course-card"
             :style="{ borderLeftColor: course.color }"
           >
-            <span>{{ course.startTime }} - {{ course.endTime }}</span>
-            <strong>{{ course.name }}</strong>
-            <p>{{ course.room }}</p>
+            <div class="course-content">
+              <span>{{ course.startTime }} - {{ course.endTime }}</span>
+              <strong>{{ course.name }}</strong>
+              <p>{{ course.room || 'Location not set' }}</p>
+            </div>
+
+            <div class="course-actions">
+              <el-tooltip content="Edit course" placement="top">
+                <el-button :icon="EditPen" circle text size="small" @click="openEditDialog(course)" />
+              </el-tooltip>
+              <el-tooltip content="Delete course" placement="top">
+                <el-button
+                  :icon="Delete"
+                  circle
+                  text
+                  type="danger"
+                  size="small"
+                  @click="deleteCourse(course.id)"
+                />
+              </el-tooltip>
+            </div>
           </div>
         </div>
 
         <EmptyState v-else description="No class blocks." />
       </article>
     </section>
+
+    <CourseEditorDialog
+      v-model="dialogVisible"
+      :course="editingCourse"
+      :courses="courses"
+      :week-days="weekDays"
+      @save="saveCourse"
+    />
   </div>
 </template>
 
@@ -95,6 +217,12 @@ function coursesForDay(day) {
   margin-bottom: 14px;
 }
 
+.day-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 h2 {
   margin: 0;
   color: var(--text-strong);
@@ -108,11 +236,16 @@ h2 {
 }
 
 .course-card {
-  padding: 12px 12px 12px 14px;
+  position: relative;
+  padding: 14px 46px 14px 14px;
   border: 1px solid var(--app-border);
   border-left: 5px solid;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.course-content {
+  min-width: 0;
 }
 
 .course-card span {
@@ -125,11 +258,36 @@ h2 {
   display: block;
   margin-top: 4px;
   color: var(--text-strong);
+  font-size: 0.96rem;
   font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
 }
 
 .course-card p {
   margin: 6px 0 0;
   color: var(--text-muted);
+}
+
+.course-actions {
+  display: flex;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  gap: 2px;
+}
+
+@media (hover: hover) {
+  .course-actions {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .course-card:hover .course-actions,
+  .course-card:focus-within .course-actions {
+    opacity: 1;
+  }
 }
 </style>
