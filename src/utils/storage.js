@@ -82,6 +82,7 @@ export function createDefaultData() {
         priority: 'High',
         dueDate: today,
         completed: false,
+        estimatedMinutes: 45,
         notes: 'Focus on usability heuristics and cognitive load.',
       },
       {
@@ -92,6 +93,7 @@ export function createDefaultData() {
         priority: 'High',
         dueDate: today,
         completed: false,
+        estimatedMinutes: 90,
         notes: 'Keep the guided flow simple and demo-friendly.',
       },
       {
@@ -102,6 +104,7 @@ export function createDefaultData() {
         priority: 'Medium',
         dueDate: addDaysISO(1),
         completed: false,
+        estimatedMinutes: 60,
         notes: '',
       },
       {
@@ -112,7 +115,34 @@ export function createDefaultData() {
         priority: 'Low',
         dueDate: addDaysISO(2),
         completed: true,
+        estimatedMinutes: 30,
         notes: '',
+      },
+    ],
+    resources: [
+      {
+        id: 'resource-vue-guide',
+        title: 'Vue3 Composition API Guide',
+        course: 'Web Development',
+        type: 'Reference',
+        url: 'https://vuejs.org/guide/introduction.html',
+        note: 'Core concepts for building the task and resource modules.',
+      },
+      {
+        id: 'resource-element-plus',
+        title: 'Element Plus Components',
+        course: 'Human-Computer Interaction',
+        type: 'Tool',
+        url: 'https://element-plus.org/',
+        note: 'Useful UI components for forms, dialogs, tags, and navigation.',
+      },
+      {
+        id: 'resource-report-outline',
+        title: 'Final Report Outline',
+        course: 'Project Review Session',
+        type: 'Note',
+        url: 'https://example.com/report-outline',
+        note: 'User needs, modules, interaction design, limitations, improvements, and contribution.',
       },
     ],
     plans: [],
@@ -135,7 +165,10 @@ export function loadLearningData() {
       ...defaults,
       ...savedData,
       courses: Array.isArray(savedData.courses) ? savedData.courses : defaults.courses,
-      tasks: Array.isArray(savedData.tasks) ? savedData.tasks : defaults.tasks,
+      tasks: Array.isArray(savedData.tasks)
+        ? savedData.tasks.map((task) => ({ estimatedMinutes: 45, ...task }))
+        : defaults.tasks,
+      resources: Array.isArray(savedData.resources) ? savedData.resources : defaults.resources,
       plans: Array.isArray(savedData.plans) ? savedData.plans : defaults.plans,
     }
   } catch (error) {

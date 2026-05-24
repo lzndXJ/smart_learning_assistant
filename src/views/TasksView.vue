@@ -15,6 +15,7 @@ const dialogVisible = ref(false)
 const editingTask = ref(null)
 const statusFilter = ref('all')
 const priorityFilter = ref('all')
+const courseFilter = ref('all')
 
 const priorityOrder = {
   High: 1,
@@ -45,6 +46,7 @@ const filteredTasks = computed(() => {
       return true
     })
     .filter((task) => priorityFilter.value === 'all' || task.priority === priorityFilter.value)
+    .filter((task) => courseFilter.value === 'all' || task.course === courseFilter.value)
     .sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1
       if (a.dueDate !== b.dueDate) return (a.dueDate || '').localeCompare(b.dueDate || '')
@@ -253,6 +255,16 @@ function taskMeta(task) {
             <el-option label="Medium" value="Medium" />
             <el-option label="Low" value="Low" />
           </el-select>
+
+          <el-select v-model="courseFilter" class="course-select" aria-label="Course filter">
+            <el-option label="All courses" value="all" />
+            <el-option
+              v-for="course in courses"
+              :key="course.id"
+              :label="course.name"
+              :value="course.name"
+            />
+          </el-select>
         </div>
       </div>
 
@@ -382,7 +394,8 @@ function taskMeta(task) {
   gap: 10px;
 }
 
-.priority-select {
+.priority-select,
+.course-select {
   width: 160px;
 }
 

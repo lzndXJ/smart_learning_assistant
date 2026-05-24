@@ -69,6 +69,7 @@ function formatDueDate(dateString) {
           <span>{{ task.category || 'General' }}</span>
           <span>{{ task.course || 'No course linked' }}</span>
           <span>Due {{ formatDueDate(task.dueDate) }}</span>
+          <span>{{ task.estimatedMinutes || 45 }} min</span>
         </div>
       </div>
 

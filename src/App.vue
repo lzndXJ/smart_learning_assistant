@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { Calendar, Checked, Compass, House } from '@element-plus/icons-vue'
+import { Calendar, Checked, Collection, Compass, House } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -9,6 +9,7 @@ const navItems = [
   { label: 'Dashboard', to: '/', icon: House },
   { label: 'Schedule', to: '/schedule', icon: Calendar },
   { label: 'Tasks', to: '/tasks', icon: Checked },
+  { label: 'Resources', to: '/resources', icon: Collection },
   { label: 'Planner', to: '/planner', icon: Compass },
 ]
 
@@ -177,7 +178,7 @@ const currentPage = computed(() => {
   }
 
   .nav-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .nav-link {

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Calendar, Checked, Clock, Compass, TrendCharts } from '@element-plus/icons-vue'
+import { Calendar, Checked, Clock, Collection, Compass, TrendCharts, Warning } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import TaskList from '@/components/TaskList.vue'
@@ -14,6 +14,7 @@ const initialData = loadLearningData()
 const courses = ref(initialData.courses)
 const tasks = ref(initialData.tasks)
 const plans = ref(initialData.plans)
+const resources = ref(initialData.resources)
 
 const today = new Date()
 const todayName = today.toLocaleDateString('en-US', { weekday: 'long' })
@@ -38,6 +39,32 @@ const todaysPendingTasks = computed(() => {
 
 const pendingTasks = computed(() => tasks.value.filter((task) => !task.completed))
 const completedTasks = computed(() => tasks.value.filter((task) => task.completed))
+const totalEstimatedMinutes = computed(() => {
+  return pendingTasks.value.reduce((sum, task) => sum + Number(task.estimatedMinutes || 45), 0)
+})
+
+const dueSoonTasks = computed(() => {
+  return pendingTasks.value
+    .filter((task) => daysUntil(task.dueDate) <= 3)
+    .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
+})
+
+const courseWorkload = computed(() => {
+  const counts = new Map()
+
+  tasks.value.forEach((task) => {
+    const courseName = task.course || 'General'
+    counts.set(courseName, (counts.get(courseName) || 0) + 1)
+  })
+
+  const maxCount = Math.max(...counts.values(), 1)
+
+  return Array.from(counts, ([course, count]) => ({
+    course,
+    count,
+    percent: Math.round((count / maxCount) * 100),
+  })).sort((a, b) => b.count - a.count)
+})
 
 const completionRate = computed(() => {
   if (tasks.value.length === 0) return 0
@@ -48,6 +75,21 @@ const latestPlan = computed(() => plans.value[0] || null)
 
 function priorityRank(priority) {
   return { High: 1, Medium: 2, Low: 3 }[priority] || 4
+}
+
+function daysUntil(dateString) {
+  if (!dateString) return 999
+  const todayStart = new Date()
+  const start = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate())
+  const target = new Date(`${dateString}T00:00:00`)
+  return Math.ceil((target - start) / 86400000)
+}
+
+function deadlineText(dateString) {
+  const days = daysUntil(dateString)
+  if (days < 0) return `${Math.abs(days)} day(s) overdue`
+  if (days === 0) return 'Due today'
+  return `${days} day(s) left`
 }
 
 function toggleTask(taskId) {
@@ -93,9 +135,63 @@ function toggleTask(taskId) {
         :icon="TrendCharts"
         tone="amber"
       />
+      <MetricCard
+        title="Study time"
+        :value="`${Math.round(totalEstimatedMinutes / 60)}h`"
+        detail="Estimated pending workload"
+        :icon="Clock"
+        tone="green"
+      />
+      <MetricCard
+        title="Resources"
+        :value="resources.length"
+        detail="Saved course materials"
+        :icon="Collection"
+        tone="blue"
+      />
     </div>
 
     <div class="dashboard-grid">
+      <section class="panel workload-panel">
+        <div class="section-heading">
+          <h2 class="section-title">Course Workload</h2>
+          <el-tag effect="plain">Task distribution</el-tag>
+        </div>
+        <div class="workload-list">
+          <div v-for="item in courseWorkload" :key="item.course" class="workload-row">
+            <div class="workload-label">
+              <strong>{{ item.course }}</strong>
+              <span>{{ item.count }} task(s)</span>
+            </div>
+            <div class="workload-track">
+              <span class="workload-bar" :style="{ width: `${item.percent}%` }"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reminder-panel">
+        <div class="section-heading">
+          <h2 class="section-title">Deadline Reminders</h2>
+          <el-tag :type="dueSoonTasks.length ? 'warning' : 'success'" effect="plain">
+            <el-icon><Warning /></el-icon>
+            {{ dueSoonTasks.length }} urgent
+          </el-tag>
+        </div>
+        <div v-if="dueSoonTasks.length" class="reminder-list">
+          <article v-for="task in dueSoonTasks.slice(0, 4)" :key="task.id" class="reminder-item">
+            <div>
+              <strong>{{ task.title }}</strong>
+              <p>{{ task.course || 'No course linked' }}</p>
+            </div>
+            <el-tag :type="daysUntil(task.dueDate) <= 0 ? 'danger' : 'warning'" size="small">
+              {{ deadlineText(task.dueDate) }}
+            </el-tag>
+          </article>
+        </div>
+        <EmptyState v-else description="No urgent deadline within three days." />
+      </section>
+
       <section class="panel">
         <h2 class="section-title">Today's Classes</h2>
         <div v-if="todaysClasses.length" class="class-list">
@@ -161,6 +257,10 @@ function toggleTask(taskId) {
   gap: 16px;
 }
 
+.workload-panel {
+  grid-column: span 2;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -171,6 +271,61 @@ function toggleTask(taskId) {
 .class-list {
   display: grid;
   gap: 10px;
+}
+
+.workload-list,
+.reminder-list {
+  display: grid;
+  gap: 12px;
+}
+
+.workload-row {
+  display: grid;
+  gap: 8px;
+}
+
+.workload-label,
+.reminder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workload-label strong,
+.reminder-item strong {
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
+.workload-label span,
+.reminder-item p {
+  color: var(--text-muted);
+}
+
+.reminder-item p {
+  margin: 2px 0 0;
+}
+
+.workload-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #edf2f1;
+}
+
+.workload-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+}
+
+.reminder-item {
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .class-item {
@@ -215,6 +370,10 @@ h3,
 @media (max-width: 980px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .workload-panel {
+    grid-column: auto;
   }
 
   .next-step-panel {
