@@ -41,6 +41,7 @@ const answers = reactive({
 const generatedPlan = ref(null)
 const isListening = ref(false)
 const languageMode = ref('en-US')
+const isValidatingPlan = ref(false)
 let recognition = null
 
 const currentStep = computed(() => steps[currentStepIndex.value])
@@ -51,7 +52,7 @@ const activeVoiceLanguageLabel = computed(() => {
   return languageMode.value === 'zh-CN' ? 'Chinese' : 'English'
 })
 
-function nextStep() {
+async function nextStep() {
   const key = currentStep.value.key
 
   if (!answers[key].trim()) {
@@ -62,7 +63,7 @@ function nextStep() {
   if (currentStepIndex.value < steps.length - 1) {
     currentStepIndex.value += 1
   } else {
-    generatePlan()
+    await generatePlan()
   }
 }
 
@@ -107,14 +108,31 @@ function stopVoiceInput() {
   isListening.value = false
 }
 
-function generatePlan() {
-  const minutes = extractMinutes(answers.time)
+async function generatePlan() {
+  isValidatingPlan.value = true
+
+  try {
+    const validation = await validatePlanInput()
+
+    if (!validation.valid) {
+      ElMessage.warning(validation.reason || 'Please enter a realistic subject, time, and study goal.')
+      return
+    }
+
+    createPlan(validation)
+  } finally {
+    isValidatingPlan.value = false
+  }
+}
+
+function createPlan(validation) {
+  const minutes = validation.minutes
   const plan = {
     id: `plan-${Date.now()}`,
     createdAt: new Date().toISOString(),
-    subject: answers.subject.trim(),
+    subject: validation.cleanedSubject,
     time: answers.time.trim(),
-    goal: answers.goal.trim(),
+    goal: validation.cleanedGoal,
     steps: buildPlanSteps(minutes),
   }
 
@@ -122,6 +140,81 @@ function generatePlan() {
   plans.value = [plan, ...plans.value].slice(0, 5)
   saveLearningSection('plans', plans.value)
   ElMessage.success('Study plan saved locally.')
+}
+
+async function validatePlanInput() {
+  try {
+    const response = await fetch('/api/validate-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject: answers.subject.trim(),
+        time: answers.time.trim(),
+        goal: answers.goal.trim(),
+      }),
+    })
+
+    if (!response.ok) throw new Error('AI validation is unavailable.')
+
+    const data = await response.json()
+    return {
+      valid: Boolean(data.valid),
+      reason: data.reason,
+      cleanedSubject: data.cleanedSubject || answers.subject.trim(),
+      cleanedGoal: data.cleanedGoal || answers.goal.trim(),
+      minutes: Number(data.minutes || extractMinutes(answers.time)),
+    }
+  } catch (error) {
+    const localResult = validatePlanInputLocally()
+    if (!localResult.valid) return localResult
+
+    ElMessage.info('AI validation unavailable. Used local validation rules.')
+    return localResult
+  }
+}
+
+function validatePlanInputLocally() {
+  const subject = answers.subject.trim()
+  const goal = answers.goal.trim()
+  const minutes = extractMinutes(answers.time)
+
+  if (!looksMeaningful(subject, 2)) {
+    return {
+      valid: false,
+      reason: 'Please enter a recognizable study subject.',
+    }
+  }
+
+  if (!Number.isFinite(minutes) || minutes < 15 || minutes > 360) {
+    return {
+      valid: false,
+      reason: 'Please enter a realistic study time between 15 and 360 minutes.',
+    }
+  }
+
+  if (!looksMeaningful(goal, 4)) {
+    return {
+      valid: false,
+      reason: 'Please enter a concrete learning goal.',
+    }
+  }
+
+  return {
+    valid: true,
+    reason: '',
+    cleanedSubject: subject,
+    cleanedGoal: goal,
+    minutes,
+  }
+}
+
+function looksMeaningful(text, minLength) {
+  const normalized = text.replace(/\s+/g, '')
+  const hasLetterOrChinese = /[a-zA-Z\u4e00-\u9fff]/.test(normalized)
+  const uniqueChars = new Set(normalized).size
+  const repeatedNoise = /(.)\1{3,}/.test(normalized)
+
+  return normalized.length >= minLength && hasLetterOrChinese && uniqueChars >= 2 && !repeatedNoise
 }
 
 function addPlanToTasks(plan) {
@@ -218,8 +311,8 @@ function isPlanTaskAdded(plan) {
 }
 
 function extractMinutes(timeText) {
-  const number = Number((timeText.match(/\d+/) || [60])[0])
-  return Number.isFinite(number) && number > 0 ? number : 60
+  const number = Number((timeText.match(/\d+/) || [NaN])[0])
+  return Number.isFinite(number) && number > 0 ? number : NaN
 }
 
 function buildPlanSteps(minutes) {
@@ -316,7 +409,12 @@ onBeforeUnmount(() => {
             <el-button :icon="Back" :disabled="currentStepIndex === 0" @click="previousStep">
               Back
             </el-button>
-            <el-button type="primary" :icon="currentStepIndex === steps.length - 1 ? Check : Right" @click="nextStep">
+            <el-button
+              type="primary"
+              :icon="currentStepIndex === steps.length - 1 ? Check : Right"
+              :loading="isValidatingPlan"
+              @click="nextStep"
+            >
               {{ currentStepIndex === steps.length - 1 ? 'Generate plan' : 'Next' }}
             </el-button>
           </div>

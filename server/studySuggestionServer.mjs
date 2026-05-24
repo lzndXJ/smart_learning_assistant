@@ -21,7 +21,7 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (req.method !== 'POST' || req.url !== '/api/study-suggestion') {
+  if (req.method !== 'POST' || !['/api/study-suggestion', '/api/validate-plan'].includes(req.url)) {
     sendJson(res, 404, { error: 'Not found' })
     return
   }
@@ -32,28 +32,13 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    const studyContext = await readJson(req)
-    const response = await fetch(`${BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a concise study assistant for university students. Give one practical paragraph, under 90 words, based only on the supplied task and resource data.',
-          },
-          {
-            role: 'user',
-            content: `Create a focused study suggestion from this JSON:\n${JSON.stringify(studyContext, null, 2)}`,
-          },
-        ],
-        temperature: 0.3,
-      }),
-    })
+    const requestBody = await readJson(req)
+    const messages =
+      req.url === '/api/validate-plan'
+        ? buildPlanValidationMessages(requestBody)
+        : buildStudySuggestionMessages(requestBody)
+
+    const response = await requestChatCompletion(messages)
 
     const data = await response.json()
 
@@ -62,8 +47,15 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    const outputText = extractOutputText(data)
+
+    if (req.url === '/api/validate-plan') {
+      sendJson(res, 200, parseValidationResult(outputText))
+      return
+    }
+
     sendJson(res, 200, {
-      suggestion: extractOutputText(data),
+      suggestion: outputText,
       source: `${PROVIDER} ${MODEL}`,
     })
   } catch (error) {
@@ -82,6 +74,78 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+}
+
+function requestChatCompletion(messages) {
+  return fetch(`${BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature: 0.2,
+    }),
+  })
+}
+
+function buildStudySuggestionMessages(studyContext) {
+  return [
+    {
+      role: 'system',
+      content: 'You are a concise study assistant for university students. Give one practical paragraph, under 90 words, based only on the supplied task and resource data.',
+    },
+    {
+      role: 'user',
+      content: `Create a focused study suggestion from this JSON:\n${JSON.stringify(studyContext, null, 2)}`,
+    },
+  ]
+}
+
+function buildPlanValidationMessages(planInput) {
+  return [
+    {
+      role: 'system',
+      content: [
+        'You validate study-planner inputs.',
+        'Return strict JSON only, with this shape:',
+        '{"valid": boolean, "reason": "short user-facing reason", "cleanedSubject": "string", "cleanedGoal": "string", "minutes": number}',
+        'A valid input must have a recognizable study subject, a real available time in minutes, and a goal that looks like a learning task.',
+        'Reject random text, jokes, profanity, meaningless repeated characters, and time text without a plausible duration.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify(planInput, null, 2),
+    },
+  ]
+}
+
+function parseValidationResult(outputText) {
+  const jsonText = extractJsonObject(outputText)
+  const parsed = JSON.parse(jsonText)
+
+  return {
+    valid: Boolean(parsed.valid),
+    reason: String(parsed.reason || ''),
+    cleanedSubject: String(parsed.cleanedSubject || ''),
+    cleanedGoal: String(parsed.cleanedGoal || ''),
+    minutes: Number(parsed.minutes || 0),
+    source: `${PROVIDER} ${MODEL}`,
+  }
+}
+
+function extractJsonObject(text) {
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('AI validation response was not JSON.')
+  }
+
+  return text.slice(start, end + 1)
 }
 
 function sendJson(res, status, body) {
