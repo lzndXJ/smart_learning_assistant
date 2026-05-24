@@ -1,9 +1,6 @@
 <script setup>
-import { computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView } from 'vue-router'
 import { Calendar, Checked, Collection, Compass, House } from '@element-plus/icons-vue'
-
-const route = useRoute()
 
 const navItems = [
   { label: 'Dashboard', to: '/', icon: House },
@@ -13,9 +10,6 @@ const navItems = [
   { label: 'Planner', to: '/planner', icon: Compass },
 ]
 
-const currentPage = computed(() => {
-  return navItems.find((item) => item.to === route.path)?.label || 'Dashboard'
-})
 </script>
 
 <template>
@@ -45,10 +39,7 @@ const currentPage = computed(() => {
 
     <el-container class="main-panel">
       <el-header class="top-bar">
-        <div>
-          <span class="top-label">Current page</span>
-          <strong>{{ currentPage }}</strong>
-        </div>
+        <span class="workspace-label">Student workspace</span>
         <el-tag effect="plain" type="success">Local demo version</el-tag>
       </el-header>
 
@@ -138,21 +129,17 @@ const currentPage = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 68px;
+  height: 52px;
   padding: 0 32px;
   border-bottom: 1px solid var(--app-border);
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(12px);
 }
 
-.top-bar div {
-  display: grid;
-  gap: 2px;
-}
-
-.top-label {
+.workspace-label {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .content-area {

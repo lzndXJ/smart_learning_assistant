@@ -40,8 +40,8 @@ defineProps({
 .metric-card {
   display: flex;
   gap: 14px;
-  min-height: 118px;
-  padding: 18px;
+  min-height: 104px;
+  padding: 16px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--panel-background);
@@ -52,8 +52,8 @@ defineProps({
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   font-size: 1.25rem;
 }
@@ -84,7 +84,7 @@ strong {
   display: block;
   margin-top: 5px;
   color: var(--text-strong);
-  font-size: 1.8rem;
+  font-size: 1.65rem;
   font-weight: 800;
   line-height: 1;
 }

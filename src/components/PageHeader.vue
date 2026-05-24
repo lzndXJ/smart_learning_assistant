@@ -49,7 +49,7 @@ defineProps({
 h1 {
   margin: 0;
   color: var(--text-strong);
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 800;
   line-height: 1.15;
 }

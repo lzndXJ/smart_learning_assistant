@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Calendar, Checked, Clock, Collection, Compass, TrendCharts, Warning } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MetricCard from '@/components/MetricCard.vue'
@@ -15,6 +16,9 @@ const courses = ref(initialData.courses)
 const tasks = ref(initialData.tasks)
 const plans = ref(initialData.plans)
 const resources = ref(initialData.resources)
+const aiSuggestion = ref('')
+const aiSuggestionSource = ref('')
+const aiLoading = ref(false)
 
 const today = new Date()
 const todayName = today.toLocaleDateString('en-US', { weekday: 'long' })
@@ -49,23 +53,6 @@ const dueSoonTasks = computed(() => {
     .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
 })
 
-const courseWorkload = computed(() => {
-  const counts = new Map()
-
-  tasks.value.forEach((task) => {
-    const courseName = task.course || 'General'
-    counts.set(courseName, (counts.get(courseName) || 0) + 1)
-  })
-
-  const maxCount = Math.max(...counts.values(), 1)
-
-  return Array.from(counts, ([course, count]) => ({
-    course,
-    count,
-    percent: Math.round((count / maxCount) * 100),
-  })).sort((a, b) => b.count - a.count)
-})
-
 const completionRate = computed(() => {
   if (tasks.value.length === 0) return 0
   return Math.round((completedTasks.value.length / tasks.value.length) * 100)
@@ -90,6 +77,82 @@ function deadlineText(dateString) {
   if (days < 0) return `${Math.abs(days)} day(s) overdue`
   if (days === 0) return 'Due today'
   return `${days} day(s) left`
+}
+
+function buildFallbackSuggestion() {
+  if (dueSoonTasks.value.length) {
+    const firstTask = dueSoonTasks.value[0]
+    return [
+      `Start with "${firstTask.title}" because it is ${deadlineText(firstTask.dueDate).toLowerCase()}.`,
+      `Use a 45-minute focused block, then review related resources for ${firstTask.course || 'this topic'}.`,
+      `After that, update the task status so the dashboard progress stays accurate.`,
+    ].join(' ')
+  }
+
+  if (pendingTasks.value.length) {
+    const highPriorityTask = [...pendingTasks.value].sort(
+      (a, b) => priorityRank(a.priority) - priorityRank(b.priority),
+    )[0]
+
+    return [
+      `Your study queue is stable today. Pick "${highPriorityTask.title}" as the next task.`,
+      `Break it into one small outcome and spend about ${highPriorityTask.estimatedMinutes || 45} minutes on it.`,
+      'Save any useful material in Resources so it remains connected to your course work.',
+    ].join(' ')
+  }
+
+  return 'No urgent work is waiting. Use the Planner to prepare the next study session or add upcoming course tasks.'
+}
+
+function buildAiPayload() {
+  return {
+    today: todayLabel,
+    metrics: {
+      classesToday: todaysClasses.value.length,
+      pendingTasks: pendingTasks.value.length,
+      completionRate: completionRate.value,
+      estimatedPendingMinutes: totalEstimatedMinutes.value,
+      savedResources: resources.value.length,
+    },
+    urgentTasks: dueSoonTasks.value.slice(0, 5).map((task) => ({
+      title: task.title,
+      course: task.course || 'No course linked',
+      priority: task.priority,
+      dueDate: task.dueDate,
+      deadline: deadlineText(task.dueDate),
+      estimatedMinutes: task.estimatedMinutes || 45,
+    })),
+    resources: resources.value.slice(0, 5).map((resource) => ({
+      title: resource.title,
+      course: resource.course || 'No course linked',
+      type: resource.type,
+    })),
+  }
+}
+
+async function generateAiSuggestion() {
+  aiLoading.value = true
+
+  try {
+    const response = await fetch('/api/study-suggestion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildAiPayload()),
+    })
+
+    if (!response.ok) throw new Error('AI service is unavailable.')
+
+    const data = await response.json()
+    aiSuggestion.value = data.suggestion || buildFallbackSuggestion()
+    aiSuggestionSource.value = data.source || 'AI'
+    ElMessage.success('Study suggestion generated.')
+  } catch (error) {
+    aiSuggestion.value = buildFallbackSuggestion()
+    aiSuggestionSource.value = 'Local fallback'
+    ElMessage.info('Generated with local study rules.')
+  } finally {
+    aiLoading.value = false
+  }
 }
 
 function toggleTask(taskId) {
@@ -138,7 +201,7 @@ function toggleTask(taskId) {
       <MetricCard
         title="Study time"
         :value="`${Math.round(totalEstimatedMinutes / 60)}h`"
-        detail="Estimated pending workload"
+        detail="Estimated pending study time"
         :icon="Clock"
         tone="green"
       />
@@ -152,24 +215,6 @@ function toggleTask(taskId) {
     </div>
 
     <div class="dashboard-grid">
-      <section class="panel workload-panel">
-        <div class="section-heading">
-          <h2 class="section-title">Course Workload</h2>
-          <el-tag effect="plain">Task distribution</el-tag>
-        </div>
-        <div class="workload-list">
-          <div v-for="item in courseWorkload" :key="item.course" class="workload-row">
-            <div class="workload-label">
-              <strong>{{ item.course }}</strong>
-              <span>{{ item.count }} task(s)</span>
-            </div>
-            <div class="workload-track">
-              <span class="workload-bar" :style="{ width: `${item.percent}%` }"></span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="panel reminder-panel">
         <div class="section-heading">
           <h2 class="section-title">Deadline Reminders</h2>
@@ -190,6 +235,19 @@ function toggleTask(taskId) {
           </article>
         </div>
         <EmptyState v-else description="No urgent deadline within three days." />
+      </section>
+
+      <section class="panel ai-panel">
+        <div class="section-heading">
+          <h2 class="section-title">AI Study Suggestion</h2>
+          <el-tag effect="plain">{{ aiSuggestionSource || 'Ready' }}</el-tag>
+        </div>
+        <p class="ai-copy">
+          {{ aiSuggestion || 'Generate a focused study suggestion from current tasks, deadlines, and saved resources.' }}
+        </p>
+        <el-button type="primary" :loading="aiLoading" @click="generateAiSuggestion">
+          Generate suggestion
+        </el-button>
       </section>
 
       <section class="panel">
@@ -257,10 +315,6 @@ function toggleTask(taskId) {
   gap: 16px;
 }
 
-.workload-panel {
-  grid-column: span 2;
-}
-
 .section-heading {
   display: flex;
   align-items: center;
@@ -273,18 +327,11 @@ function toggleTask(taskId) {
   gap: 10px;
 }
 
-.workload-list,
 .reminder-list {
   display: grid;
   gap: 12px;
 }
 
-.workload-row {
-  display: grid;
-  gap: 8px;
-}
-
-.workload-label,
 .reminder-item {
   display: flex;
   align-items: center;
@@ -292,13 +339,11 @@ function toggleTask(taskId) {
   gap: 12px;
 }
 
-.workload-label strong,
 .reminder-item strong {
   color: var(--text-strong);
   font-weight: 800;
 }
 
-.workload-label span,
 .reminder-item p {
   color: var(--text-muted);
 }
@@ -307,25 +352,17 @@ function toggleTask(taskId) {
   margin: 2px 0 0;
 }
 
-.workload-track {
-  height: 12px;
-  overflow: hidden;
-  border-radius: 8px;
-  background: #edf2f1;
-}
-
-.workload-bar {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
-}
-
 .reminder-item {
   padding: 12px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.ai-copy {
+  margin: 0 0 16px;
+  color: var(--text-body);
+  line-height: 1.7;
 }
 
 .class-item {
@@ -370,10 +407,6 @@ h3,
 @media (max-width: 980px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
-  }
-
-  .workload-panel {
-    grid-column: auto;
   }
 
   .next-step-panel {
