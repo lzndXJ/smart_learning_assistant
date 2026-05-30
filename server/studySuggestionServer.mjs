@@ -21,7 +21,10 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  if (req.method !== 'POST' || !['/api/study-suggestion', '/api/validate-plan'].includes(req.url)) {
+  if (
+    req.method !== 'POST' ||
+    !['/api/study-suggestion', '/api/validate-plan', '/api/generate-plan'].includes(req.url)
+  ) {
     sendJson(res, 404, { error: 'Not found' })
     return
   }
@@ -33,10 +36,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     const requestBody = await readJson(req)
-    const messages =
-      req.url === '/api/validate-plan'
-        ? buildPlanValidationMessages(requestBody)
-        : buildStudySuggestionMessages(requestBody)
+    const messages = buildMessages(req.url, requestBody)
 
     const response = await requestChatCompletion(messages)
 
@@ -51,6 +51,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/api/validate-plan') {
       sendJson(res, 200, parseValidationResult(outputText))
+      return
+    }
+
+    if (req.url === '/api/generate-plan') {
+      sendJson(res, 200, parseGeneratedPlanResult(outputText))
       return
     }
 
@@ -104,6 +109,12 @@ function buildStudySuggestionMessages(studyContext) {
   ]
 }
 
+function buildMessages(url, requestBody) {
+  if (url === '/api/validate-plan') return buildPlanValidationMessages(requestBody)
+  if (url === '/api/generate-plan') return buildPlanGenerationMessages(requestBody)
+  return buildStudySuggestionMessages(requestBody)
+}
+
 function buildPlanValidationMessages(planInput) {
   return [
     {
@@ -123,6 +134,28 @@ function buildPlanValidationMessages(planInput) {
   ]
 }
 
+function buildPlanGenerationMessages(planInput) {
+  return [
+    {
+      role: 'system',
+      content: [
+        'You generate concise, practical study plans for university students.',
+        'Return strict JSON only, with this shape:',
+        '{"valid": boolean, "reason": "short reason", "cleanedSubject": "string", "cleanedGoal": "string", "minutes": number, "summary": "one sentence", "steps": [{"label": "string", "minutes": number, "detail": "string"}]}',
+        'A valid input must have a recognizable study subject, a realistic available time from 15 to 360 minutes, and a concrete learning goal.',
+        'Reject random text, jokes, profanity, meaningless repeated characters, and time text without a plausible duration.',
+        'If valid, create 3 to 5 steps. Make step labels specific to the subject and goal, not generic.',
+        'The sum of step minutes should be close to the available minutes.',
+        'Use the same language as the user input when it is clearly Chinese; otherwise use English.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify(planInput, null, 2),
+    },
+  ]
+}
+
 function parseValidationResult(outputText) {
   const jsonText = extractJsonObject(outputText)
   const parsed = JSON.parse(jsonText)
@@ -133,6 +166,30 @@ function parseValidationResult(outputText) {
     cleanedSubject: String(parsed.cleanedSubject || ''),
     cleanedGoal: String(parsed.cleanedGoal || ''),
     minutes: Number(parsed.minutes || 0),
+    source: `${PROVIDER} ${MODEL}`,
+  }
+}
+
+function parseGeneratedPlanResult(outputText) {
+  const jsonText = extractJsonObject(outputText)
+  const parsed = JSON.parse(jsonText)
+
+  return {
+    valid: Boolean(parsed.valid),
+    reason: String(parsed.reason || ''),
+    cleanedSubject: String(parsed.cleanedSubject || ''),
+    cleanedGoal: String(parsed.cleanedGoal || ''),
+    minutes: Number(parsed.minutes || 0),
+    summary: String(parsed.summary || ''),
+    steps: Array.isArray(parsed.steps)
+      ? parsed.steps
+          .map((step) => ({
+            label: String(step.label || '').trim(),
+            minutes: Number(step.minutes || 0),
+            detail: String(step.detail || '').trim(),
+          }))
+          .filter((step) => step.label && step.minutes > 0 && step.detail)
+      : [],
     source: `${PROVIDER} ${MODEL}`,
   }
 }

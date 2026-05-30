@@ -41,7 +41,7 @@ const answers = reactive({
 const generatedPlan = ref(null)
 const isListening = ref(false)
 const languageMode = ref('en-US')
-const isValidatingPlan = ref(false)
+const isGeneratingPlan = ref(false)
 let recognition = null
 
 const currentStep = computed(() => steps[currentStepIndex.value])
@@ -109,31 +109,33 @@ function stopVoiceInput() {
 }
 
 async function generatePlan() {
-  isValidatingPlan.value = true
+  isGeneratingPlan.value = true
 
   try {
-    const validation = await validatePlanInput()
+    const planResult = await generatePlanWithAi()
 
-    if (!validation.valid) {
-      ElMessage.warning(validation.reason || 'Please enter a realistic subject, time, and study goal.')
+    if (!planResult.valid) {
+      ElMessage.warning(planResult.reason || 'Please enter a realistic subject, time, and study goal.')
       return
     }
 
-    createPlan(validation)
+    createPlan(planResult)
   } finally {
-    isValidatingPlan.value = false
+    isGeneratingPlan.value = false
   }
 }
 
-function createPlan(validation) {
-  const minutes = validation.minutes
+function createPlan(planResult) {
+  const minutes = planResult.minutes
   const plan = {
     id: `plan-${Date.now()}`,
     createdAt: new Date().toISOString(),
-    subject: validation.cleanedSubject,
+    subject: planResult.cleanedSubject,
     time: answers.time.trim(),
-    goal: validation.cleanedGoal,
-    steps: buildPlanSteps(minutes),
+    goal: planResult.cleanedGoal,
+    summary: planResult.summary || '',
+    source: planResult.source || 'Local rules',
+    steps: planResult.steps?.length ? planResult.steps : buildPlanSteps(minutes),
   }
 
   generatedPlan.value = plan
@@ -142,9 +144,9 @@ function createPlan(validation) {
   ElMessage.success('Study plan saved locally.')
 }
 
-async function validatePlanInput() {
+async function generatePlanWithAi() {
   try {
-    const response = await fetch('/api/validate-plan', {
+    const response = await fetch('/api/generate-plan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -154,7 +156,7 @@ async function validatePlanInput() {
       }),
     })
 
-    if (!response.ok) throw new Error('AI validation is unavailable.')
+    if (!response.ok) throw new Error('AI plan generation is unavailable.')
 
     const data = await response.json()
     return {
@@ -163,13 +165,21 @@ async function validatePlanInput() {
       cleanedSubject: data.cleanedSubject || answers.subject.trim(),
       cleanedGoal: data.cleanedGoal || answers.goal.trim(),
       minutes: Number(data.minutes || extractMinutes(answers.time)),
+      summary: data.summary || '',
+      steps: normalizePlanSteps(data.steps),
+      source: data.source || 'AI',
     }
   } catch (error) {
     const localResult = validatePlanInputLocally()
     if (!localResult.valid) return localResult
 
-    ElMessage.info('AI validation unavailable. Used local validation rules.')
-    return localResult
+    ElMessage.info('AI generation unavailable. Used local study rules.')
+    return {
+      ...localResult,
+      summary: 'A simple local plan was generated from your subject, time, and goal.',
+      steps: buildPlanSteps(localResult.minutes),
+      source: 'Local rules',
+    }
   }
 }
 
@@ -206,6 +216,19 @@ function validatePlanInputLocally() {
     cleanedGoal: goal,
     minutes,
   }
+}
+
+function normalizePlanSteps(steps) {
+  if (!Array.isArray(steps)) return []
+
+  return steps
+    .map((step) => ({
+      label: String(step.label || '').trim(),
+      minutes: Number(step.minutes || 0),
+      detail: String(step.detail || '').trim(),
+    }))
+    .filter((step) => step.label && step.minutes > 0 && step.detail)
+    .slice(0, 5)
 }
 
 function looksMeaningful(text, minLength) {
@@ -298,11 +321,12 @@ function createTaskFromPlan(plan) {
 }
 
 function buildPlanNotes(plan) {
+  const summary = plan.summary ? `Summary: ${plan.summary}\n` : ''
   const planSteps = plan.steps
     .map((step) => `${step.label}: ${step.minutes} min - ${step.detail}`)
     .join('\n')
 
-  return `Subject: ${plan.subject}\nTime: ${plan.time}\nGoal: ${plan.goal}\n\n${planSteps}`
+  return `Subject: ${plan.subject}\nTime: ${plan.time}\nGoal: ${plan.goal}\n${summary}\n${planSteps}`
 }
 
 function isPlanTaskAdded(plan) {
@@ -412,7 +436,7 @@ onBeforeUnmount(() => {
             <el-button
               type="primary"
               :icon="currentStepIndex === steps.length - 1 ? Check : Right"
-              :loading="isValidatingPlan"
+              :loading="isGeneratingPlan"
               @click="nextStep"
             >
               {{ currentStepIndex === steps.length - 1 ? 'Generate plan' : 'Next' }}
@@ -425,6 +449,10 @@ onBeforeUnmount(() => {
           <div class="plan-summary">
             <h2>{{ generatedPlan.subject }}</h2>
             <p>{{ generatedPlan.time }} - {{ generatedPlan.goal }}</p>
+            <p v-if="generatedPlan.summary" class="ai-summary">{{ generatedPlan.summary }}</p>
+            <el-tag v-if="generatedPlan.source" effect="plain" size="small">
+              {{ generatedPlan.source }}
+            </el-tag>
             <ol>
               <li v-for="item in generatedPlan.steps" :key="item.label">
                 <strong>{{ item.label }} - {{ item.minutes }} min</strong>
@@ -547,6 +575,11 @@ h2 {
 .recent-plan p {
   margin: 6px 0 0;
   color: var(--text-muted);
+}
+
+.plan-summary .ai-summary {
+  color: var(--text-body);
+  line-height: 1.7;
 }
 
 ol {
