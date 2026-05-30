@@ -20,6 +20,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  lessonPeriods: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'save'])
@@ -53,8 +57,8 @@ function createEmptyTimeSlot(day = 'Monday') {
   return {
     localId: `slot-${Date.now()}-${Math.random()}`,
     day,
-    startTime: '09:00',
-    endTime: '10:00',
+    startPeriod: 1,
+    endPeriod: 1,
     room: '',
   }
 }
@@ -73,17 +77,27 @@ function createTimeSlots(course) {
     return course.timeSlots.map((slot) => ({
       ...createEmptyTimeSlot(slot.day),
       ...slot,
+      startPeriod: getPeriodIndex(slot.startPeriod, slot.startTime, 'startTime'),
+      endPeriod: getPeriodIndex(slot.endPeriod, slot.endTime, 'endTime'),
     }))
   }
 
   return [
     {
       ...createEmptyTimeSlot(course?.day || 'Monday'),
-      startTime: course?.startTime || '09:00',
-      endTime: course?.endTime || '10:00',
+      startPeriod: getPeriodIndex(course?.startPeriod, course?.startTime, 'startTime'),
+      endPeriod: getPeriodIndex(course?.endPeriod, course?.endTime, 'endTime'),
       room: course?.room || '',
     },
   ]
+}
+
+function getPeriodIndex(periodIndex, time, fieldName) {
+  const requestedIndex = Number(periodIndex)
+  if (props.lessonPeriods.some((period) => period.index === requestedIndex)) return requestedIndex
+
+  const matchedPeriod = props.lessonPeriods.find((period) => period[fieldName] === time)
+  return matchedPeriod?.index || props.lessonPeriods[0]?.index || 1
 }
 
 watch(
@@ -107,23 +121,32 @@ function saveCourse() {
   }
 
   for (const slot of form.timeSlots) {
-    if (!slot.day || !slot.startTime || !slot.endTime) {
+    if (!slot.day || !slot.startPeriod || !slot.endPeriod) {
       ElMessage.warning('Please complete every time slot.')
       return
     }
 
-    if (slot.startTime >= slot.endTime) {
-      ElMessage.warning('Each end time should be later than its start time.')
+    if (Number(slot.startPeriod) > Number(slot.endPeriod)) {
+      ElMessage.warning('The ending period should not be earlier than the starting period.')
       return
     }
   }
 
-  const cleanSlots = form.timeSlots.map((slot) => ({
-    day: slot.day,
-    startTime: slot.startTime,
-    endTime: slot.endTime,
-    room: slot.room.trim(),
-  }))
+  const cleanSlots = form.timeSlots.map((slot) => {
+    const startPeriod = Number(slot.startPeriod)
+    const endPeriod = Number(slot.endPeriod)
+    const startSlot = props.lessonPeriods.find((period) => period.index === startPeriod)
+    const endSlot = props.lessonPeriods.find((period) => period.index === endPeriod)
+
+    return {
+      day: slot.day,
+      startPeriod,
+      endPeriod,
+      startTime: startSlot?.startTime || '',
+      endTime: endSlot?.endTime || '',
+      room: slot.room.trim(),
+    }
+  })
 
   emit('save', {
     id: form.id,
@@ -143,6 +166,8 @@ function addTimeSlot() {
   const lastSlot = form.timeSlots[form.timeSlots.length - 1]
   form.timeSlots.push({
     ...createEmptyTimeSlot(lastSlot?.day || 'Monday'),
+    startPeriod: lastSlot?.startPeriod || 1,
+    endPeriod: lastSlot?.endPeriod || lastSlot?.startPeriod || 1,
     room: lastSlot?.room || '',
   })
 }
@@ -157,21 +182,25 @@ function removeTimeSlot(index) {
 }
 
 function slotOverlapMessage(slot, index) {
-  if (!slot.day || !slot.startTime || !slot.endTime || slot.startTime >= slot.endTime) return ''
+  if (!slot.day || !slot.startPeriod || !slot.endPeriod || Number(slot.startPeriod) > Number(slot.endPeriod)) return ''
 
   const existingCourse = props.courses.find((course) => {
     if (course.id === form.id || course.day !== slot.day) return false
-    return slot.startTime < course.endTime && slot.endTime > course.startTime
+    return Number(slot.startPeriod) <= Number(course.endPeriod) && Number(slot.endPeriod) >= Number(course.startPeriod)
   })
 
   if (existingCourse) return `This overlaps with ${existingCourse.name}.`
 
   const siblingIndex = form.timeSlots.findIndex((otherSlot, otherIndex) => {
     if (otherIndex === index || otherSlot.day !== slot.day) return false
-    return slot.startTime < otherSlot.endTime && slot.endTime > otherSlot.startTime
+    return Number(slot.startPeriod) <= Number(otherSlot.endPeriod) && Number(slot.endPeriod) >= Number(otherSlot.startPeriod)
   })
 
   return siblingIndex >= 0 ? 'This overlaps with another time slot in this course.' : ''
+}
+
+function periodLabel(period) {
+  return `Period ${period.index} (${period.startTime} - ${period.endTime})`
 }
 </script>
 
@@ -237,26 +266,26 @@ function slotOverlapMessage(slot, index) {
         </div>
 
         <div class="form-grid">
-          <el-form-item label="Start time">
-            <el-time-select
-              v-model="slot.startTime"
-              start="06:00"
-              step="00:05"
-              end="23:55"
-              class="full-width"
-              placeholder="Start time"
-            />
+          <el-form-item label="Start period">
+            <el-select v-model="slot.startPeriod" class="full-width" placeholder="Start period">
+              <el-option
+                v-for="period in lessonPeriods"
+                :key="period.index"
+                :label="periodLabel(period)"
+                :value="period.index"
+              />
+            </el-select>
           </el-form-item>
 
-          <el-form-item label="End time">
-            <el-time-select
-              v-model="slot.endTime"
-              start="06:00"
-              step="00:05"
-              end="23:55"
-              class="full-width"
-              placeholder="End time"
-            />
+          <el-form-item label="End period">
+            <el-select v-model="slot.endPeriod" class="full-width" placeholder="End period">
+              <el-option
+                v-for="period in lessonPeriods"
+                :key="period.index"
+                :label="periodLabel(period)"
+                :value="period.index"
+              />
+            </el-select>
           </el-form-item>
         </div>
 
